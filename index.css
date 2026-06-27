@@ -1,0 +1,908 @@
+/* Premium styling for Memory Wizard Extension */
+
+:root {
+    --wizard-primary: #a3842e;
+    --wizard-primary-rgb: 163, 132, 46;
+}
+
+.wizard-container {
+    padding: 15px;
+    background: rgba(20, 20, 25, 0.95);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+    color: #e0e0e6;
+    margin-bottom: 20px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.wizard-title {
+    font-size: 1.5em;
+    font-weight: 700;
+    margin-bottom: 15px;
+    background: linear-gradient(135deg, var(--wizard-primary), rgba(var(--wizard-primary-rgb), 0.6));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    border-bottom: 2px solid rgba(var(--wizard-primary-rgb), 0.2);
+    padding-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.wizard-section {
+    margin-bottom: 20px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.wizard-section-title {
+    font-size: 1.1em;
+    font-weight: 600;
+    color: var(--wizard-primary);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+}
+
+/* Titles that carry a trailing control (e.g. the logs 刷新 button) push it to
+   the far right while keeping the label left-aligned. */
+.wizard-section-title.wizard-title-spread {
+    justify-content: space-between;
+}
+
+.wizard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.wizard-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.wizard-form-group label {
+    font-size: 0.85em;
+    color: #9ca3af;
+    font-weight: 500;
+}
+
+.wizard-input, .wizard-select {
+    background: rgba(0, 0, 0, 0.3) !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    color: #e0e0e6 !important;
+    padding: 8px 12px !important;
+    border-radius: 6px !important;
+    outline: none;
+    transition: all 0.3s ease;
+}
+
+.wizard-input:focus, .wizard-select:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Tree Styling */
+.wizard-tree {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+    position: relative;
+}
+
+/* Sub-trees have left indent and vertical line connection spacing */
+.wizard-tree .wizard-tree {
+    padding-left: 18px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.wizard-tree-item {
+    margin: 4px 0;
+    padding-left: 14px;
+    position: relative;
+}
+
+/* Visual Connector Lines for Tree structure */
+.wizard-tree-item::before {
+    content: "";
+    position: absolute;
+    top: -2px;
+    left: -4px;
+    bottom: 50%;
+    width: 12px;
+    border-left: 1px dashed rgba(255, 255, 255, 0.15);
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.wizard-tree-item::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: -4px;
+    bottom: -6px;
+    border-left: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.wizard-tree-item:last-child::after {
+    display: none;
+}
+
+/* Root nodes do not need connector lines */
+#wizard-tree-root > .wizard-tree-item::before,
+#wizard-tree-root > .wizard-tree-item::after {
+    display: none;
+}
+#wizard-tree-root > .wizard-tree-item {
+    padding-left: 0;
+}
+
+.wizard-tree-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+    border-left: 3px solid transparent;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.wizard-tree-header:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.wizard-tree-header.active-node {
+    background: rgba(var(--wizard-primary-rgb), 0.15);
+    border-color: rgba(var(--wizard-primary-rgb), 0.4);
+    border-left: 3px solid var(--wizard-primary);
+}
+
+.wizard-tree-header.wizard-tree-dragging {
+    opacity: 0.45;
+    outline: 1px dashed rgba(var(--wizard-primary-rgb), 0.45);
+}
+
+.wizard-tree-header.wizard-tree-drop-target {
+    background: rgba(52, 211, 153, 0.14) !important;
+    border-color: rgba(52, 211, 153, 0.65) !important;
+    box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.35);
+}
+
+.wizard-tree-header.wizard-tree-drop-before::before,
+.wizard-tree-header.wizard-tree-drop-after::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 999px;
+    background: #34d399;
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.8);
+    pointer-events: none;
+    z-index: 2;
+}
+
+.wizard-tree-header.wizard-tree-drop-before::before {
+    top: -3px;
+}
+
+.wizard-tree-header.wizard-tree-drop-after::after {
+    bottom: -3px;
+}
+
+/* Color coding root categories to stand out visually */
+.wizard-tree-header[data-path="身份核"],
+.wizard-tree-header[data-path^="身份核/"] {
+    border-left: 3px solid #ef4444 !important;
+}
+.wizard-tree-header[data-path="知识"],
+.wizard-tree-header[data-path^="知识/"] {
+    border-left: 3px solid #3b82f6 !important;
+}
+.wizard-tree-header[data-path="关系与情感"],
+.wizard-tree-header[data-path^="关系与情感/"] {
+    border-left: 3px solid #ec4899 !important;
+}
+.wizard-tree-header[data-path="现实事件"],
+.wizard-tree-header[data-path^="现实事件/"] {
+    border-left: 3px solid #10b981 !important;
+}
+.wizard-tree-header[data-path="项目"],
+.wizard-tree-header[data-path^="项目/"] {
+    border-left: 3px solid #f59e0b !important;
+}
+.wizard-tree-header[data-path="挂账"],
+.wizard-tree-header[data-path^="挂账/"] {
+    border-left: 3px solid #8b5cf6 !important;
+}
+
+/* A node with a user-chosen custom color overrides any path-based category
+   color above. Must come AFTER those rules and use !important to win. */
+.wizard-tree-header.has-custom-color {
+    border-left: 3px solid var(--node-custom-color) !important;
+}
+
+/* Archived nodes: dim the whole row and make it semi-transparent. */
+.wizard-tree-header.wizard-node-archived-row {
+    opacity: 0.45;
+    filter: grayscale(0.85);
+}
+
+.wizard-tree-header.wizard-node-archived-row:hover {
+    opacity: 0.7;
+}
+
+.wizard-node-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    flex-wrap: nowrap;
+}
+
+.wizard-node-title {
+    font-weight: 500;
+    font-size: 0.95em;
+    white-space: nowrap;
+    overflow: visible;
+    /* Title wins over suffixes. Keep the node name on one row; hint/badges are the
+       parts allowed to shrink/clip first. */
+    flex: 0 0 auto;
+}
+
+.wizard-node-hint {
+    font-size: 0.8em;
+    color: #6b7280;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-style: italic;
+    /* Absorb the leftover row width and take the ellipsis so the title stays intact. */
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.wizard-node-badges {
+    display: flex;
+    gap: 4px;
+    margin-left: 8px;
+    min-width: 0;
+    overflow: hidden;
+    flex: 1 1 auto;
+}
+
+.wizard-badge {
+    font-size: 0.7em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.wizard-badge-pinned {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.wizard-badge-archived {
+    background: rgba(107, 114, 128, 0.15);
+    color: #9ca3af;
+    border: 1px solid rgba(107, 114, 128, 0.3);
+}
+
+.wizard-badge-nopath {
+    background: rgba(245, 158, 11, 0.13);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.wizard-node-actions {
+    display: flex;
+    gap: 6px;
+    opacity: 0.3;
+    transition: opacity 0.2s ease;
+    flex: 0 0 auto;
+}
+
+.wizard-tree-header:hover .wizard-node-actions {
+    opacity: 1;
+}
+
+.wizard-node-new-badge {
+    margin-left: auto;
+    color: #34d399;
+    font-size: 0.76em;
+    font-weight: 700;
+    white-space: nowrap;
+    padding: 0 4px;
+}
+
+.wizard-node-source-meta {
+    margin-left: 6px;
+    color: #6b7280;
+    font-size: 0.76em;
+    font-weight: 400;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 0 4px;
+}
+
+.wizard-node-source-meta.wizard-node-source-meta-solo {
+    margin-left: auto;
+}
+
+.wizard-node-source-clear {
+    color: #9ca3af;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.16s ease, color 0.16s ease;
+}
+
+.wizard-tree-header:hover .wizard-node-source-clear,
+.wizard-node-source-meta:hover .wizard-node-source-clear {
+    opacity: 1;
+}
+
+.wizard-node-source-clear:hover {
+    color: #f87171;
+}
+
+.wizard-btn-icon {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 2px;
+    font-size: 0.9em;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.wizard-btn-icon:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.wizard-btn-icon.delete:hover {
+    color: #f87171;
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* Edit Modal / Form */
+.wizard-node-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 15px;
+}
+
+.wizard-textarea {
+    min-height: 120px;
+    resize: vertical;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.wizard-btn-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.wizard-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.wizard-btn-primary {
+    background: var(--wizard-primary);
+    color: white;
+}
+
+.wizard-btn-primary:hover {
+    filter: brightness(0.95);
+    box-shadow: 0 0 10px rgba(var(--wizard-primary-rgb), 0.5);
+}
+
+.wizard-btn-warning {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: var(--wizard-primary) !important;
+    border: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+
+.wizard-btn-warning:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+    box-shadow: none !important;
+    filter: none !important;
+}
+
+.wizard-btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e0e0e6;
+}
+
+.wizard-btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Toggle buttons (on/off pill replacements for checkboxes) */
+.wizard-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    font-size: 0.82em;
+    color: #9ca3af;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    font-family: inherit;
+    line-height: 1.2;
+    user-select: none;
+}
+
+.wizard-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: #d1d5db;
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+.wizard-toggle-btn .wizard-toggle-dot {
+    font-size: 0.7em;
+    color: #6b7280;
+    transition: color 0.18s ease;
+}
+
+.wizard-toggle-btn[data-active="true"] {
+    background: rgba(var(--wizard-primary-rgb), 0.18);
+    border-color: rgba(var(--wizard-primary-rgb), 0.55);
+    color: var(--wizard-primary);
+    box-shadow: 0 0 6px rgba(var(--wizard-primary-rgb), 0.25) inset;
+}
+
+.wizard-toggle-btn[data-active="true"] .wizard-toggle-dot {
+    color: var(--wizard-primary);
+}
+
+.wizard-toggle-btn[data-active="true"]:hover {
+    background: rgba(var(--wizard-primary-rgb), 0.26);
+}
+
+/* Logs and summary tabs */
+.wizard-tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 15px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 5px;
+}
+
+.wizard-tab {
+    padding: 6px 12px;
+    cursor: pointer;
+    border-radius: 4px 4px 0 0;
+    color: #9ca3af;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.wizard-tab.active {
+    background: rgba(var(--wizard-primary-rgb), 0.1);
+    color: var(--wizard-primary);
+    border-bottom: 2px solid var(--wizard-primary);
+}
+
+.wizard-tab-content {
+    display: none;
+}
+
+.wizard-tab-content.active {
+    display: block;
+}
+
+.wizard-log-viewer {
+    background: #09090b;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    padding: 10px;
+    font-family: monospace;
+    font-size: 0.85em;
+    max-height: 250px;
+    overflow-y: auto;
+    color: #a1a1aa;
+    white-space: pre-wrap;
+}
+
+/* Search bar styling */
+.wizard-search-container {
+    display: flex;
+    margin-bottom: 10px;
+}
+
+.wizard-search-input {
+    flex: 1;
+    border-radius: 6px 0 0 6px !important;
+}
+
+.wizard-search-btn {
+    border-radius: 0 6px 6px 0 !important;
+    background: var(--wizard-primary);
+    color: white;
+    border: none;
+    padding: 0 15px;
+    cursor: pointer;
+}
+
+/* Toggle Switch */
+.wizard-switch-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* 时记 regex rule rows — stacked, each a compact summary + remove button. */
+.wizard-shiji-rule-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.82em;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 6px;
+    padding: 4px 10px;
+}
+
+/* Horizontal toggle chip — flex pill containing a switch + label text.
+   Used in 功能运行控制 to lay all sub-toggles in a single wrapping row. */
+.wizard-toggle-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 0.88em;
+    color: #d1d5db;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Purple-tinted chip for the auto-summary group */
+.wizard-toggle-chip-purple {
+    background: rgba(167, 139, 250, 0.06);
+    border-color: rgba(167, 139, 250, 0.22);
+}
+
+.wizard-switch {
+    position: relative;
+    display: inline-block;
+    width: 44px;
+    height: 22px;
+}
+
+.wizard-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.wizard-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #374151;
+    transition: .4s;
+    border-radius: 22px;
+}
+
+.wizard-slider:before {
+    position: absolute;
+    content: "";
+    height: 16px;
+    width: 16px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked + .wizard-slider {
+    background-color: var(--wizard-primary);
+}
+
+input:checked + .wizard-slider:before {
+    transform: translateX(22px);
+}
+
+/* Custom Modal Overlay */
+.wizard-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    z-index: 99999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.wizard-modal-overlay .wizard-container {
+    background: rgba(20, 20, 25, 0.98);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    /* Width/height are user-adjustable via CSS variables (set from settings).
+       Defaults: 90vw wide (capped 1200px) and 95vh tall. */
+    width: var(--wizard-modal-w, 90vw);
+    max-width: 100vw;
+    /* Fixed overall size so the plugin frame stays the SAME on every tab.
+       The title + tabs are fixed; only the active tab content scrolls inside. */
+    height: var(--wizard-modal-h, 95vh);
+    /* Override the base .wizard-container max-height: 80vh, otherwise it clamps
+       the height and uiHeight: 100 can never reach the full viewport. */
+    max-height: var(--wizard-modal-h, 95vh);
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    overflow: hidden;            /* outer frame never scrolls or resizes */
+    display: flex;
+    flex-direction: column;
+    animation: wizardFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    margin-bottom: 0; /* Override the margin-bottom: 20px */
+}
+
+/* Title and tab bar keep their natural height; they never shrink. */
+.wizard-modal-overlay .wizard-container > .wizard-title,
+.wizard-modal-overlay .wizard-container > .wizard-tabs {
+    flex: 0 0 auto;
+}
+
+/* The active tab content fills the remaining height and scrolls internally,
+   so switching tabs never changes the modal's outer dimensions. */
+.wizard-modal-overlay .wizard-container > .wizard-tab-content.active {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;               /* allow the flex child to actually scroll */
+    padding-right: 4px;          /* breathing room for the scrollbar */
+}
+
+/* Context-fusion tab: its inner columns manage their own scroll, so the tab
+   itself is a non-scrolling flex column and the editor/panel row stretches to
+   fill the full available height instead of a fixed pixel height. */
+.wizard-modal-overlay .wizard-container > #wizard-tab-context-fusion.active {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#wizard-tab-context-fusion.active > .wizard-fusion-row {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Tree tab: the search bar + actions stay fixed, the tree/editor row fills the
+   rest of the height and each column scrolls on its own. */
+.wizard-modal-overlay .wizard-container > #wizard-tab-tree.active {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+#wizard-tab-tree.active > .wizard-tree-row {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Both columns inherit the row height so their internal scroll kicks in. The
+   flex-wrap fallback (narrow widths) is preserved by the inline min-width. */
+#wizard-tab-tree.active > .wizard-tree-row > .wizard-tree-list-col,
+#wizard-tab-tree.active > .wizard-tree-row > .wizard-node-editor {
+    max-height: 100%;
+}
+
+@keyframes wizardFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Force native up/down spin buttons on the width/height number inputs. ST's
+   global theme often hides spinners with appearance:none; re-enable them here
+   and make them always visible (not hover-only) so they are clickable. */
+#wizard-ui-width,
+#wizard-ui-height {
+    -moz-appearance: number-input;
+    appearance: auto;
+}
+
+#wizard-ui-width::-webkit-inner-spin-button,
+#wizard-ui-width::-webkit-outer-spin-button,
+#wizard-ui-height::-webkit-inner-spin-button,
+#wizard-ui-height::-webkit-outer-spin-button {
+    -webkit-appearance: inner-spin-button !important;
+    appearance: auto !important;
+    opacity: 1 !important;
+    margin-left: 4px;
+    height: 28px;
+    cursor: pointer;
+}
+
+/* Keep every form-group inside the settings grid from overflowing its column
+   (the color value input with flex:1 was bleeding into the width input). */
+.wizard-grid .wizard-form-group {
+    min-width: 0;
+}
+
+.wizard-grid .wizard-form-group > div {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.wizard-grid .wizard-form-group input {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Tooltip ? icons for advanced parameters */
+.wizard-tooltip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.12);
+    color: #9ca3af;
+    font-size: 0.7em;
+    font-weight: 700;
+    cursor: default;
+    position: relative;
+    vertical-align: middle;
+    margin-left: 3px;
+}
+
+.wizard-tooltip-icon:hover {
+    background: var(--wizard-primary);
+    color: #fff;
+}
+
+/* Shared tooltip bubble, appended to <body> so it is NOT clipped by the modal's
+   overflow:hidden / scroll containers. Positioned via JS. Always fully visible. */
+#wizard-tooltip-bubble {
+    position: fixed;
+    z-index: 2147483647;          /* above the modal overlay */
+    max-width: 360px;
+    background: rgba(20, 20, 28, 0.98);
+    color: #e0e0e6;
+    font-size: 0.85em;
+    font-weight: 400;
+    line-height: 1.5;
+    padding: 8px 11px;
+    border-radius: 6px;
+    border: 1px solid rgba(var(--wizard-primary-rgb), 0.5);
+    white-space: normal;
+    text-align: left;
+    pointer-events: none;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    display: none;
+}
+
+#wizard-tooltip-bubble.wizard-tooltip-visible {
+    opacity: 1;
+    display: block;
+}
+
+/* Node color swatch palette */
+.wizard-node-color-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 4px;
+}
+
+.wizard-color-swatch {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    cursor: pointer;
+    box-sizing: border-box;
+    border: 2px solid transparent;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.wizard-color-swatch:hover {
+    transform: scale(1.2);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.wizard-color-swatch-active {
+    border-color: #fff !important;
+    transform: scale(1.15);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+/* Prevent inputs and textareas from flashing white when focused */
+.wizard-container input:focus,
+.wizard-container textarea:focus,
+.wizard-container select:focus,
+.wizard-modal-overlay input:focus,
+.wizard-modal-overlay textarea:focus,
+.wizard-modal-overlay select:focus,
+.wizard-input:focus,
+.wizard-select:focus,
+.wizard-textarea:focus,
+.wizard-summary-textarea:focus,
+.context-msg-textarea:focus {
+    background: rgba(0, 0, 0, 0.45) !important;
+    background-color: rgba(0, 0, 0, 0.45) !important;
+    color: #e0e0e6 !important;
+    border-color: var(--wizard-primary) !important;
+    box-shadow: 0 0 0 2px rgba(var(--wizard-primary-rgb), 0.2) !important;
+    outline: none !important;
+}
+
+/* ── 重复内联样式收敛（与原内联值逐字节等价，仅清理 settings.html 可读性，不改视觉） ── */
+/* 各 overlay/卡片顶部标题栏：左右分布 + 下边框分隔 */
+.wizard-overlay-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+}
+/* 各 overlay/卡片底部按钮栏：右对齐 + 上边框分隔 */
+.wizard-overlay-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 8px;
+}
