@@ -12,6 +12,26 @@
 const MODULE_NAME = 'st-memory-wizzard';
 const LOG_PREFIX = '[Memory Wizard]';
 
+// Build request headers for all plugin backend fetch() calls.
+// SillyTavern enforces CSRF protection: every POST must carry the X-CSRF-Token
+// header, otherwise the server returns 403 "Invalid CSRF token".
+// SillyTavern's script.js exports getRequestHeaders() which bundles both
+// Content-Type and the token. We try to use it; if unavailable, fall back to
+// reading the token from the global `token` variable that ST sets on page load.
+function getWizardHeaders() {
+    try {
+        // Prefer SillyTavern's own helper (always up-to-date)
+        const stHeaders = window.SillyTavern?.getContext()?.getRequestHeaders?.();
+        if (stHeaders) return stHeaders;
+    } catch (_) { /* ignore */ }
+    // Fallback: manually construct with the global CSRF token
+    const headers = { 'Content-Type': 'application/json' };
+    if (typeof window.token === 'string' && window.token) {
+        headers['X-CSRF-Token'] = window.token;
+    }
+    return headers;
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // REGION: 配置与默认值（config 对象 + 内置默认 prompts / 常量）
 // ══════════════════════════════════════════════════════════════════════
@@ -1545,7 +1565,7 @@ async function writeLog(message, level = 'INFO') {
     try {
         await fetch('/api/plugins/st-memory-wizzard/log', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({ message, level })
         });
     } catch (e) {
@@ -2476,7 +2496,7 @@ async function showBackupPicker(kind, metaOnly = false) {
     try {
         const res = await fetch('/api/plugins/st-memory-wizzard/list-backups', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({ kind })
         });
         const data = await res.json();
@@ -2533,7 +2553,7 @@ async function showBackupPicker(kind, metaOnly = false) {
     try {
         const res = await fetch('/api/plugins/st-memory-wizzard/read-backup', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({ kind, name: chosen.name, location: chosen.location })
         });
         if (!res.ok) { toastr.error('读取备份失败。'); return null; }
@@ -3047,7 +3067,7 @@ async function fetchAndMergeSharedTree() {
     try {
         const res = await fetch('/api/plugins/st-memory-wizzard/get-shared-tree', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({})
         });
         const data = await res.json();
@@ -3083,7 +3103,7 @@ async function saveTreeToServer(skipNormalize = false) {
         try {
             await fetch('/api/plugins/st-memory-wizzard/save-shared-tree', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getWizardHeaders(),
                 body: JSON.stringify({ tree: shared })
             });
         } catch (e) {
@@ -3093,7 +3113,7 @@ async function saveTreeToServer(skipNormalize = false) {
     try {
         const res = await fetch('/api/plugins/st-memory-wizzard/save-tree', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({ chatId: activeChatId, tree: personal })
         });
         const data = await res.json();
@@ -4727,7 +4747,7 @@ async function loadConfig() {
         try {
             const res = await fetch('/api/plugins/st-memory-wizzard/get-config', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getWizardHeaders(),
                 body: JSON.stringify({})
             });
             if (res.ok) {
@@ -5151,7 +5171,7 @@ async function saveConfig(silent = false) {
     try {
         const res = await fetch('/api/plugins/st-memory-wizzard/save-config', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({ config })
         });
         const data = await res.json();
@@ -5185,7 +5205,7 @@ async function loadSummaries() {
     try {
         const res = await fetch('/api/plugins/st-memory-wizzard/get-summaries', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({ chatId: activeChatId })
         });
         summaries = await res.json();
@@ -7618,7 +7638,7 @@ async function saveSummariesToServer() {
     try {
         await fetch('/api/plugins/st-memory-wizzard/save-summaries', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({ chatId: activeChatId, summaries })
         });
         await loadSummaries(); // Redraw UI (also recomputes floorRemapState + 上下文融合标记)
@@ -7633,7 +7653,7 @@ async function saveSandboxChatToServer() {
     try {
         await fetch('/api/plugins/st-memory-wizzard/save-sandbox-chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({ chatId: activeChatId, chat: sandboxChatContext })
         });
     } catch (e) {
@@ -7647,7 +7667,7 @@ async function loadSandboxChatFromServer() {
     try {
         const res = await fetch('/api/plugins/st-memory-wizzard/get-sandbox-chat', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({ chatId: activeChatId })
         });
         const data = await res.json();
@@ -9520,7 +9540,7 @@ function registerNodeFormListeners() {
             $btn.prop('disabled', true).css('opacity', '0.65');
             toastr.info('本地网关未运行，正在启动…');
             try {
-                const r = await fetch('/api/plugins/st-memory-wizzard/gateway/start', { method: 'POST' });
+                const r = await fetch('/api/plugins/st-memory-wizzard/gateway/start', { method: 'POST', headers: getWizardHeaders() });
                 const j = await r.json().catch(() => ({}));
                 if (j.ok) {
                     healthy = true;
@@ -12839,7 +12859,7 @@ function registerNodeFormListeners() {
         try {
             const res = await fetch('/api/plugins/st-memory-wizzard/backfill-realtime', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getWizardHeaders(),
                 body: JSON.stringify({ summaries, sandboxName: picked.name, sandboxLocation: picked.location })
             });
             if (!res.ok) {
@@ -13651,7 +13671,7 @@ async function checkBackendConnection() {
     try {
         const res = await fetch('/api/plugins/st-memory-wizzard/get-config', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getWizardHeaders(),
             body: JSON.stringify({})
         });
         if (res.ok) {
@@ -13898,7 +13918,7 @@ async function onChatChanged() {
             try {
                 await fetch('/api/plugins/st-memory-wizzard/migrate-key', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: getWizardHeaders(),
                     body: JSON.stringify({ fromChatId: legacyChatId, toChatId: newChatId })
                 });
             } catch (e) {
@@ -13929,7 +13949,7 @@ async function onChatChanged() {
         try {
             const res = await fetch('/api/plugins/st-memory-wizzard/get-tree', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: getWizardHeaders(),
                 body: JSON.stringify({ chatId: activeChatId })
             });
             const data = await res.json();
