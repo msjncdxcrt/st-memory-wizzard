@@ -738,6 +738,45 @@ input:checked + .wizard-slider:before {
     max-height: 100%;
 }
 
+@media (max-width: 768px), (pointer: coarse) {
+    #wizard-tab-tree.active {
+        overflow-y: auto;
+    }
+
+    #wizard-tab-tree.active > .wizard-tree-row {
+        flex: 0 0 auto;
+        flex-direction: column;
+        flex-wrap: nowrap !important;
+        overflow: visible;
+    }
+
+    #wizard-tab-tree.active > .wizard-tree-row > .wizard-tree-list-col,
+    #wizard-tab-tree.active > .wizard-tree-row > .wizard-node-editor {
+        flex: 0 0 auto !important;
+        min-width: 0 !important;
+        width: 100% !important;
+        max-height: none !important;
+        overflow: visible !important;
+        box-sizing: border-box;
+    }
+
+    .wizard-node-actions {
+        opacity: 1;
+        gap: 10px;
+    }
+
+    .wizard-node-title {
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
+    .wizard-btn-icon {
+        min-width: 32px;
+        min-height: 32px;
+        padding: 6px;
+    }
+}
+
 @keyframes wizardFadeIn {
     from {
         opacity: 0;

@@ -1976,7 +1976,7 @@ function renderTreeView(nodes, parentEl) {
     parentEl.empty();
 
     if (!nodes || nodes.length === 0) {
-        parentEl.append('<li style="color: #9ca3af; padding: 12px; text-align: center;"><i class="fa-solid fa-seedling" style="margin-right: 6px;"></i>记忆树为空。点击右侧编辑器添加第一个节点吧！</li>');
+        parentEl.append('<li style="color: #9ca3af; padding: 12px; text-align: center;"><i class="fa-solid fa-seedling" style="margin-right: 6px;"></i>记忆树为空。使用编辑器添加第一个节点吧！</li>');
         return;
     }
 
@@ -2689,6 +2689,12 @@ function formatTreeSourceMeta(node) {
     };
 }
 
+function focusNodeEditorIfMobile() {
+    const panel = document.getElementById('wizard-node-form-panel');
+    if (!panel || !window.matchMedia('(max-width: 768px), (pointer: coarse)').matches) return;
+    requestAnimationFrame(() => panel.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+}
+
 function loadNodeIntoForm(node, opts = {}) {
     if (!opts.keepDraft) beginNodeEditDraft(node);
     $('#wizard-node-original-path').val(node.path);
@@ -2709,6 +2715,7 @@ function loadNodeIntoForm(node, opts = {}) {
     $('#wizard-node-color-palette .wizard-color-swatch').removeClass('wizard-color-swatch-active');
     $(`#wizard-node-color-palette .wizard-color-swatch[data-color="${effectiveColor}"]`).addClass('wizard-color-swatch-active');
     updateNodeColorPreview(effectiveColor);
+    focusNodeEditorIfMobile();
 }
 
 function treePathLeaf(path) {
