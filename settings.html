@@ -535,12 +535,12 @@
         </div>
 
         <div class="wizard-section" style="margin-top: 20px;">
-            <div class="wizard-section-title"><i class="fa-solid fa-circle-info"></i> 插件运行状态诊断 <span class="wizard-tooltip-icon wizard-tooltip-down" data-tooltip="这是一个健康检查面板，用于排查插件是否正常工作：① 后端服务连接状态——前端向插件后端 (/api/plugins/st-memory-wizzard) 发一次请求，确认后台服务在运行、能正常通信；② 当前活动聊天 ID——确认插件识别到了你当前打开的聊天；③ 结构树载入节点数——确认记忆树已成功加载；④ Prompt Hook 监听状态——确认发消息时的自动记忆路由钩子已挂载。若插件失灵，先看这里。">?</span></div>
+            <div class="wizard-section-title"><i class="fa-solid fa-circle-info"></i> 插件运行状态诊断 <span class="wizard-tooltip-icon wizard-tooltip-down" data-tooltip="这是一个健康检查面板，用于排查插件是否正常工作：① 存储服务连接状态——前端通过 TauriTavern store API 读写数据，确认存储服务在运行、能正常通信；② 当前活动聊天 ID——确认插件识别到了你当前打开的聊天；③ 结构树载入节点数——确认记忆树已成功加载；④ Prompt Hook 监听状态——确认发消息时的自动记忆路由钩子已挂载。若插件失灵，先看这里。">?</span></div>
             <div
                 style="background: rgba(255,255,255,0.02); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); display: flex; flex-direction: column; gap: 10px; font-size: 0.9em;">
                 <div
                     style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px;">
-                    <span style="color: #9ca3af;">后端服务连接状态:</span>
+                    <span style="color: #9ca3af;">存储服务连接状态:</span>
                     <span id="wizard-status-connection" style="color: #10b981; font-weight: bold;"><i
                             class="fa-solid fa-spinner fa-spin"></i> 检测中...</span>
                 </div>
@@ -570,7 +570,7 @@
                 <div
                     style="margin-top: 5px; color: #9ca3af; font-size: 0.85em; line-height: 1.4; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px; border-left: 3px solid var(--wizard-primary);">
                     <strong>💡 如何验证插件是否管用？</strong><br>
-                    1. <strong>测试连接</strong>：点击上方“测试连接”按钮，若显示“正常连接”即前端与插件后端通信无误。<br>
+                    1. <strong>测试连接</strong>：点击上方”测试连接”按钮，若显示”正常连接”即前端与 TauriTavern store 通信无误。<br>
                     2. <strong>对话测试</strong>：在聊天框发送任意消息，然后展开本页底部的 <strong>“检索与归档日志”</strong>，查看是否有最新的检索日志生成。<br>
                     3. <strong>触发匹配</strong>：在聊天中提及与记忆树节点 <strong>Hint/提示词</strong> 相关的关键词，检查日志中是否有
                     <code>Injected Paths</code> 记录。若有，即说明记忆已成功检索并注入至提示词中！
@@ -1080,7 +1080,7 @@
 
                 <div class="wizard-form-group" style="margin: 0;">
                     <label style="font-size: 0.8em; margin-bottom: 4px; color: #d1d5db;">融合来源
-                        <span class="wizard-tooltip-icon wizard-tooltip-down" data-tooltip="楼层正文：从上下文楼层（经匹配方式筛选后）融合；已有记录：把分层摘要里现有的低层记（周记/日记）手动融合为更高层记，等同后端自动融合的手动版。含史记→史记 同层融合。">?</span>
+                        <span class="wizard-tooltip-icon wizard-tooltip-down" data-tooltip="楼层正文：从上下文楼层（经匹配方式筛选后）融合；已有记录：把分层摘要里现有的低层记（周记/日记）手动融合为更高层记，等同自动融合的手动版。含史记→史记 同层融合。">?</span>
                     </label>
                     <select class="wizard-select" id="wizard-fusion-source"
                         style="padding: 5px; font-size: 0.9em; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); color: #e5e7eb;">

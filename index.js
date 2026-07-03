@@ -12,24 +12,10 @@
 const MODULE_NAME = 'st-memory-wizzard';
 const LOG_PREFIX = '[Memory Wizard]';
 
-// Build request headers for all plugin backend fetch() calls.
-// SillyTavern enforces CSRF protection: every POST must carry the X-CSRF-Token
-// header, otherwise the server returns 403 "Invalid CSRF token".
-// SillyTavern's script.js exports getRequestHeaders() which bundles both
-// Content-Type and the token. We try to use it; if unavailable, fall back to
-// reading the token from the global `token` variable that ST sets on page load.
+// TauriTavern 版无需 CSRF Token（TT 没有 SillyTavern 的 Node 服务端插件）。
+// 本函数保留以兼容可能残留的 fetch 调用；对于插件 API 调用已全部改用 window.STORE。
 function getWizardHeaders() {
-    try {
-        // Prefer SillyTavern's own helper (always up-to-date)
-        const stHeaders = window.SillyTavern?.getContext()?.getRequestHeaders?.();
-        if (stHeaders) return stHeaders;
-    } catch (_) { /* ignore */ }
-    // Fallback: manually construct with the global CSRF token
-    const headers = { 'Content-Type': 'application/json' };
-    if (typeof window.token === 'string' && window.token) {
-        headers['X-CSRF-Token'] = window.token;
-    }
-    return headers;
+    return { 'Content-Type': 'application/json' };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1559,17 +1545,15 @@ function applyMainPromptCacheControls(chat) {
 // ══════════════════════════════════════════════════════════════════════
 // REGION: LLM 调用基建 / 后端日志（writeLog / profile 解析 / callLlmDirect）
 // ══════════════════════════════════════════════════════════════════════
-// Log message to backend file
+// Log message to TauriTavern store (via STORE API)
 async function writeLog(message, level = 'INFO') {
     console.log(`${LOG_PREFIX} [${level}] ${message}`);
-    try {
-        await fetch('/api/plugins/st-memory-wizzard/log', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({ message, level })
-        });
-    } catch (e) {
-        console.error(`${LOG_PREFIX} Failed to send log to backend`, e);
+    if (window.STORE) {
+        try {
+            await window.STORE.writeLog(message, level);
+        } catch (e) {
+            console.error(`${LOG_PREFIX} Failed to persist log`, e);
+        }
     }
 }
 
@@ -2493,16 +2477,16 @@ function downloadJson(obj, filename) {
 async function showBackupPicker(kind, metaOnly = false) {
     const context = window.SillyTavern.getContext();
     let backups = [];
-    try {
-        const res = await fetch('/api/plugins/st-memory-wizzard/list-backups', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({ kind })
-        });
-        const data = await res.json();
-        backups = Array.isArray(data.backups) ? data.backups : [];
-    } catch (e) {
-        toastr.error('无法获取备份列表（服务端未响应）。');
+    if (window.STORE) {
+        try {
+            const data = await window.STORE.listBackups(kind);
+            backups = Array.isArray(data.backups) ? data.backups : [];
+        } catch (e) {
+            toastr.error('无法获取备份列表（store 未响应）。');
+            return null;
+        }
+    } else {
+        toastr.error('无法获取备份列表（STORE 不可用）。');
         return null;
     }
     if (backups.length === 0) {
@@ -2550,19 +2534,21 @@ async function showBackupPicker(kind, metaOnly = false) {
     const chosen = backups[chosenIdx];
     // Caller only needs the identity (e.g. server-side processing of a huge file).
     if (metaOnly) return { name: chosen.name, location: chosen.location };
-    try {
-        const res = await fetch('/api/plugins/st-memory-wizzard/read-backup', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({ kind, name: chosen.name, location: chosen.location })
-        });
-        if (!res.ok) { toastr.error('读取备份失败。'); return null; }
-        const data = await res.json();
-        return { name: data.name || chosen.name, data: data.data };
-    } catch (e) {
-        toastr.error('读取备份内容失败。');
-        return null;
+    if (window.STORE) {
+        try {
+            const data = await window.STORE.readBackup(kind, chosen.name);
+            if (data && data.data !== undefined) {
+                return { name: data.name || chosen.name, data: data.data };
+            }
+            toastr.error('读取备份失败。');
+            return null;
+        } catch (e) {
+            toastr.error('读取备份内容失败。');
+            return null;
+        }
     }
+    toastr.error('读取备份失败（STORE 不可用）。');
+    return null;
 }
 
 // Merge an imported node forest into memoryTree by path: existing path → overwrite
@@ -3071,18 +3057,18 @@ function deleteNodeFromTree(target) {
 // the per-character tree loads.
 async function fetchAndMergeSharedTree() {
     let sharedForest = [];
-    try {
-        const res = await fetch('/api/plugins/st-memory-wizzard/get-shared-tree', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({})
-        });
-        const data = await res.json();
-        if (Array.isArray(data)) sharedForest = data;
-    } catch (e) {
-        console.error(`${LOG_PREFIX} Failed to load shared tree`, e);
-        writeLog(`Failed to load shared tree: ${e.message}`, 'WARNING');
-        return; // leave memoryTree as-is on failure
+    if (window.STORE) {
+        try {
+            const data = await window.STORE.getSharedTree();
+            if (Array.isArray(data)) sharedForest = data;
+        } catch (e) {
+            console.error(`${LOG_PREFIX} Failed to load shared tree`, e);
+            writeLog(`Failed to load shared tree: ${e.message}`, 'WARNING');
+            return; // leave memoryTree as-is on failure
+        }
+    } else {
+        writeLog('STORE 不可用，跳过共享记忆树加载。', 'WARNING');
+        return;
     }
     sharedTreeLoaded = true;
     // Mark every shared node so the UI and split logic can recognise the branch even
@@ -3106,25 +3092,20 @@ async function saveTreeToServer(skipNormalize = false) {
     // cross-character sharing). Only save the shared document once it has been loaded
     // this session, so a failed/absent load never overwrites it with an empty branch.
     const { personal, shared } = splitSharedFromTree(memoryTree);
+    if (!window.STORE) {
+        console.error(`${LOG_PREFIX} STORE 不可用，无法保存记忆树。`);
+        return;
+    }
     if (sharedTreeLoaded && !treeLoadInProgress) {
         try {
-            await fetch('/api/plugins/st-memory-wizzard/save-shared-tree', {
-                method: 'POST',
-                headers: getWizardHeaders(),
-                body: JSON.stringify({ tree: shared })
-            });
+            await window.STORE.saveSharedTree(shared);
         } catch (e) {
             console.error(`${LOG_PREFIX} Failed to save shared tree`, e);
         }
     }
     try {
-        const res = await fetch('/api/plugins/st-memory-wizzard/save-tree', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({ chatId: activeChatId, tree: personal })
-        });
-        const data = await res.json();
-        if (data.success) {
+        const data = await window.STORE.saveTree(activeChatId, personal);
+        if (data && data.success) {
             const treeRoot = $('#wizard-tree-root');
             if (treeRoot.length > 0) {
                 renderTreeView(memoryTree, treeRoot);
@@ -4750,26 +4731,23 @@ let wizardLoadingConfig = false;
 async function loadConfig() {
     wizardLoadingConfig = true;
     try {
-        // Fetch config from backend
-        try {
-            const res = await fetch('/api/plugins/st-memory-wizzard/get-config', {
-                method: 'POST',
-                headers: getWizardHeaders(),
-                body: JSON.stringify({})
-            });
-            if (res.ok) {
-                const serverConfig = await res.json();
-                config = { ...config, ...serverConfig };
-                // 迁移旧的二档 treeInjectionMode → 新的 mtInclude* 开关。
-                // 判据：存档里没有新的 mtInclude* 字段（说明是旧版本保存的配置）。
-                // 'all' 默认值已对齐（mtIncludeRoutedBody=true, mtIncludeAllBody=false）；
-                // 'pin_only' 用户：把路由召回正文关掉，使其只出 pin 正文，复刻旧行为。
-                if (serverConfig.mtIncludeRoutedBody === undefined && config.treeInjectionMode === 'pin_only') {
-                    config.mtIncludeRoutedBody = false;
+        // 从 TauriTavern store 读取配置
+        if (window.STORE) {
+            try {
+                const serverConfig = await window.STORE.getConfig();
+                if (serverConfig && typeof serverConfig === 'object') {
+                    config = { ...config, ...serverConfig };
+                    // 迁移旧的二档 treeInjectionMode → 新的 mtInclude* 开关。
+                    // 判据：存档里没有新的 mtInclude* 字段（说明是旧版本保存的配置）。
+                    // 'all' 默认值已对齐（mtIncludeRoutedBody=true, mtIncludeAllBody=false）；
+                    // 'pin_only' 用户：把路由召回正文关掉，使其只出 pin 正文，复刻旧行为。
+                    if (serverConfig.mtIncludeRoutedBody === undefined && config.treeInjectionMode === 'pin_only') {
+                        config.mtIncludeRoutedBody = false;
+                    }
                 }
+            } catch (e) {
+                console.error(`${LOG_PREFIX} Failed to fetch config from store`, e);
             }
-        } catch (e) {
-            console.error(`${LOG_PREFIX} Failed to fetch config from server`, e);
         }
 
         // Load profiles into settings dropdowns. Each task has its own selector;
@@ -5176,13 +5154,12 @@ async function saveConfig(silent = false) {
     $('#wizard-fusion-template-macro-label').text(`{{${config.macroFusion || 'memory'}}}`);
 
     try {
-        const res = await fetch('/api/plugins/st-memory-wizzard/save-config', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({ config })
-        });
-        const data = await res.json();
-        if (data.success) {
+        if (!window.STORE) {
+            console.error(`${LOG_PREFIX} STORE 不可用，无法保存配置。`);
+            return;
+        }
+        const data = await window.STORE.saveConfig(config);
+        if (data && data.success) {
             if (!silent) {
                 toastr.success('Memory Wizard 配置已保存');
             }
@@ -5210,12 +5187,11 @@ async function saveConfig(silent = false) {
 async function loadSummaries() {
     if (!activeChatId) return;
     try {
-        const res = await fetch('/api/plugins/st-memory-wizzard/get-summaries', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({ chatId: activeChatId })
-        });
-        summaries = await res.json();
+        if (window.STORE) {
+            summaries = await window.STORE.getSummaries(activeChatId);
+        } else {
+            summaries = { recaps: [], weeklySummaries: [], historicalSummaries: [], lastArchivedIndex: 0 };
+        }
         normalizeSummaries();
 
         // Recompute floor remap BEFORE rendering so annotation is current.
@@ -5619,30 +5595,29 @@ function updateSummaryProgress() {
     injectProgress('wizard-title-historical', weeklyCount, w2h, '条周记', SUMMARY_COLORS.historical);
 }
 
-// Load logs from backend
+// 从 TauriTavern store 读取日志（STORE.getLogs），不再 HTTP fetch wizzard.log 文件。
 async function loadLogs() {
+    const viewer = $('#wizard-log-viewer');
     try {
-        // Since we are in the browser, let's fetch the log file directly via server asset path
-        // We know it is written to the extension storage directory which is served by ST as a static asset!
-        // The URL path for files in extension folder is:
-        // /scripts/extensions/third-party/st-memory-wizzard/wizzard.log
-        const res = await fetch('/scripts/extensions/third-party/st-memory-wizzard/wizzard.log');
-        const viewer = $('#wizard-log-viewer');
-        if (res.ok) {
-            const logsText = await res.text();
-            // Show last 50 lines
-            const lines = logsText.split('\n').filter(l => l.trim());
-            const lastLines = lines.slice(Math.max(0, lines.length - 50)).join('\n');
-            viewer.text(lastLines || '日志文件为空。');
+        if (window.STORE) {
+            const logs = await window.STORE.getLogs(50);
+            if (Array.isArray(logs) && logs.length > 0) {
+                const lines = logs.map(l => {
+                    const t = l.time ? new Date(l.time).toLocaleString() : '?';
+                    return `[${t}] [${l.level || 'INFO'}] ${l.message || ''}`;
+                });
+                viewer.text(lines.join('\n'));
+            } else {
+                viewer.text('暂无日志记录。');
+            }
         } else {
-            viewer.text('暂无日志记录。');
+            viewer.text('STORE 不可用，无法加载日志。');
         }
-        // Pin the view to the newest entry at the bottom and keep it there.
         if (viewer.length) {
             viewer.scrollTop(viewer[0].scrollHeight);
         }
     } catch (e) {
-        $('#wizard-log-viewer').text('加载日志失败。');
+        viewer.text('加载日志失败。');
     }
 }
 
@@ -7639,47 +7614,38 @@ async function fuseSummariesSelf(type, indices) {
     }
 }
 
-// Save summaries to server
+// Save summaries to TauriTavern store (via STORE API)
 async function saveSummariesToServer() {
-    if (!activeChatId) return;
+    if (!activeChatId || !window.STORE) return;
     try {
-        await fetch('/api/plugins/st-memory-wizzard/save-summaries', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({ chatId: activeChatId, summaries })
-        });
+        await window.STORE.saveSummaries(activeChatId, summaries);
         await loadSummaries(); // Redraw UI (also recomputes floorRemapState + 上下文融合标记)
     } catch (e) {
         console.error(`${LOG_PREFIX} Failed to save summaries`, e);
     }
 }
 
-// Save sandbox chat context to server
+// Save sandbox chat context to TauriTavern store (via STORE API)
 async function saveSandboxChatToServer() {
-    if (!activeChatId) return;
+    if (!activeChatId || !window.STORE) return;
     try {
-        await fetch('/api/plugins/st-memory-wizzard/save-sandbox-chat', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({ chatId: activeChatId, chat: sandboxChatContext })
-        });
+        await window.STORE.saveSandboxChat(activeChatId, sandboxChatContext);
     } catch (e) {
         console.error(`${LOG_PREFIX} Failed to save sandbox chat`, e);
     }
 }
 
-// Load sandbox chat context from server
+// Load sandbox chat context from TauriTavern store (via STORE API)
 async function loadSandboxChatFromServer() {
     if (!activeChatId) return;
     try {
-        const res = await fetch('/api/plugins/st-memory-wizzard/get-sandbox-chat', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({ chatId: activeChatId })
-        });
-        const data = await res.json();
-        if (Array.isArray(data)) {
-            sandboxChatContext = data;
+        if (window.STORE) {
+            const data = await window.STORE.getSandboxChat(activeChatId);
+            if (Array.isArray(data)) {
+                sandboxChatContext = data;
+            } else {
+                sandboxChatContext = [];
+            }
         } else {
             sandboxChatContext = [];
         }
@@ -9529,7 +9495,8 @@ function registerNodeFormListeners() {
         }
     });
 
-    // 本地反代网关：健康检查 + （若未运行则经服务端插件 spawn 启动）+ 打开 console + 切换 profile。
+    // 本地反代网关：健康检查 + 打开 console + 切换 profile。
+    // TauriTavern 版没有服务端插件可 spawn 网关，需用户手动启动。
     $(document).off('click', '#wizard-gateway-open-btn').on('click', '#wizard-gateway-open-btn', async function () {
         const $btn = $(this);
         if ($btn.prop('disabled')) return;
@@ -9543,26 +9510,8 @@ function registerNodeFormListeners() {
         };
         let healthy = await checkHealth();
         if (!healthy) {
-            // 经服务端插件 spawn 网关（需 enableServerPlugins=true）。
-            $btn.prop('disabled', true).css('opacity', '0.65');
-            toastr.info('本地网关未运行，正在启动…');
-            try {
-                const r = await fetch('/api/plugins/st-memory-wizzard/gateway/start', { method: 'POST', headers: getWizardHeaders() });
-                const j = await r.json().catch(() => ({}));
-                if (j.ok) {
-                    healthy = true;
-                    toastr.success('本地网关已启动。');
-                } else {
-                    toastr.error(`启动失败：${j.error || '未知错误'}。可手动双击 gateway/start-gateway.bat。`);
-                    $btn.prop('disabled', false).css('opacity', '');
-                    return;
-                }
-            } catch (e) {
-                toastr.error(`启动请求失败：${e.message}。需开启 enableServerPlugins，或手动双击 gateway/start-gateway.bat。`);
-                $btn.prop('disabled', false).css('opacity', '');
-                return;
-            }
-            $btn.prop('disabled', false).css('opacity', '');
+            toastr.info('本地网关未运行。请在 TauriTavern 外手动启动 gateway/start-gateway.bat，然后重试。');
+            // 仍然打开 console 页面（可能用户在另一边刚启动）
         }
         if (profileName) {
             const ok = await switchConnectionProfile(profileName);
@@ -12864,17 +12813,15 @@ function registerNodeFormListeners() {
         const origHtml = $btn.html();
         $btn.html('<i class="fa-solid fa-spinner fa-spin"></i> 回填中…');
         try {
-            const res = await fetch('/api/plugins/st-memory-wizzard/backfill-realtime', {
-                method: 'POST',
-                headers: getWizardHeaders(),
-                body: JSON.stringify({ summaries, sandboxName: picked.name, sandboxLocation: picked.location })
-            });
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                toastr.error(`回填失败：${err.error || res.status}`);
+            if (!window.STORE) {
+                toastr.error('回填失败：STORE 不可用。');
                 return;
             }
-            const data = await res.json();
+            const data = await window.STORE.backfillRealtime({
+                summaries,
+                sandboxName: picked.name,
+                sandboxLocation: picked.location
+            });
             if (data && data.summaries) {
                 summaries = data.summaries;
                 normalizeSummaries();
@@ -13676,20 +13623,20 @@ function registerNodeFormListeners() {
 async function checkBackendConnection() {
     const statusEl = $('#wizard-status-connection');
     try {
-        const res = await fetch('/api/plugins/st-memory-wizzard/get-config', {
-            method: 'POST',
-            headers: getWizardHeaders(),
-            body: JSON.stringify({})
-        });
-        if (res.ok) {
-            statusEl.html('<span style="color: #10b981;"><i class="fa-solid fa-circle-check"></i> 正常连接 (通信成功)</span>');
+        if (!window.STORE) {
+            statusEl.html('<span style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> STORE 不可用 (shim 未初始化)</span>');
+            return false;
+        }
+        const ok = await window.STORE.ping();
+        if (ok) {
+            statusEl.html('<span style="color: #10b981;"><i class="fa-solid fa-circle-check"></i> 正常连接 (TauriTavern store 通信成功)</span>');
             return true;
         } else {
-            statusEl.html('<span style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> 连接异常 (HTTP ' + res.status + ')</span>');
+            statusEl.html('<span style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> 连接异常 (store ping 失败)</span>');
             return false;
         }
     } catch (e) {
-        statusEl.html('<span style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> 无法连接到后端</span>');
+        statusEl.html('<span style="color: #ef4444;"><i class="fa-solid fa-triangle-exclamation"></i> 无法连接 TauriTavern store</span>');
         return false;
     }
 }
@@ -13923,11 +13870,9 @@ async function onChatChanged() {
         const legacyChatId = context?.chatId || "";
         if (legacyChatId && legacyChatId !== newChatId) {
             try {
-                await fetch('/api/plugins/st-memory-wizzard/migrate-key', {
-                    method: 'POST',
-                    headers: getWizardHeaders(),
-                    body: JSON.stringify({ fromChatId: legacyChatId, toChatId: newChatId })
-                });
+                if (window.STORE) {
+                    await window.STORE.migrateKey(legacyChatId, newChatId);
+                }
             } catch (e) {
                 console.error(`${LOG_PREFIX} Key migration request failed`, e);
             }
@@ -13954,12 +13899,12 @@ async function onChatChanged() {
         // Fetch tree from server
         treeLoadInProgress = true; // any saveTreeToServer() below must not touch the shared doc yet
         try {
-            const res = await fetch('/api/plugins/st-memory-wizzard/get-tree', {
-                method: 'POST',
-                headers: getWizardHeaders(),
-                body: JSON.stringify({ chatId: activeChatId })
-            });
-            const data = await res.json();
+            if (!window.STORE) {
+                writeLog('STORE 不可用，跳过记忆树加载。', 'WARNING');
+                treeLoadInProgress = false;
+                return;
+            }
+            const data = await window.STORE.getTree(activeChatId);
             if (Array.isArray(data)) {
                 memoryTree = data;
                 writeLog(`Tree loaded: ${memoryTree.length} root nodes.`);
