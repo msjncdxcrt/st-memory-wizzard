@@ -1,3 +1,75 @@
+// ══════════════════════════════════════════════════════════════════════
+// tauritavern-backend-shim — 内嵌于 index.js 顶部，确保在 TT 环境中最先执行
+// 创建 window.STORE 对象，封装 TauriTavern extension.store API
+// ══════════════════════════════════════════════════════════════════════
+(function () {
+    'use strict';
+    const MODULE_ID = 'st-memory-wizzard';
+    const LP = '[Memory Wizard Shim]';
+    const ttApi = window.__TAURITAVERN__;
+    if (!ttApi) { console.error(`${LP} TauriTavern API 不可用。`); window.STORE = null; return; }
+    const store = ttApi.api?.extension?.store;
+    if (!store) { console.error(`${LP} extension.store 不可用。`); window.STORE = null; return; }
+    const metadata = ttApi.api?.chat?.metadata;
+    function safeKey(id) { return (id || '').replace(/[^a-zA-Z0-9_-]/g, '_'); }
+    async function storeRead(key) {
+        try { return await store.getJson({ namespace: MODULE_ID, key }); } catch (e) {
+            if (metadata) { try { const d = await metadata.get(); if (d?.[MODULE_ID]?.[key] !== undefined) return d[MODULE_ID][key]; } catch {} }
+            return null;
+        }
+    }
+    async function storeWrite(key, value) {
+        try { await store.setJson({ namespace: MODULE_ID, key, value }); } catch (e) {
+            if (metadata) { try { const d = (await metadata.get()) || {}; if (!d[MODULE_ID]) d[MODULE_ID] = {}; d[MODULE_ID][key] = value; await metadata.setExtension({ namespace: MODULE_ID, value: d[MODULE_ID] }); } catch {} }
+        }
+    }
+    async function storeListKeys() {
+        try { const r = await store.listKeys({ namespace: MODULE_ID }); return Array.isArray(r) ? r.map(k => typeof k === 'string' ? { namespace: MODULE_ID, key: k } : k) : []; } catch { return []; }
+    }
+    window.STORE = {
+        async getConfig() { const d = await storeRead('config'); return d || {}; },
+        async saveConfig(c) { await storeWrite('config', c); return { success: true }; },
+        async getTree(chatId) { const d = await storeRead(`tree_${safeKey(chatId)}`); return Array.isArray(d) ? d : []; },
+        async saveTree(chatId, t) { await storeWrite(`tree_${safeKey(chatId)}`, t); return { success: true }; },
+        async getSharedTree() { const d = await storeRead('shared_tree'); return Array.isArray(d) ? d : []; },
+        async saveSharedTree(t) { await storeWrite('shared_tree', t); return { success: true }; },
+        async getSummaries(chatId) { const d = await storeRead(`sum_${safeKey(chatId)}`); return d || { recaps: [], weeklySummaries: [], historicalSummaries: [], lastArchivedIndex: 0 }; },
+        async saveSummaries(chatId, s) { await storeWrite(`sum_${safeKey(chatId)}`, s); return { success: true }; },
+        async getSandboxChat(chatId) { const d = await storeRead(`sandbox_${safeKey(chatId)}`); return Array.isArray(d) ? d : []; },
+        async saveSandboxChat(chatId, c) { await storeWrite(`sandbox_${safeKey(chatId)}`, c); return { success: true }; },
+        async listBackups(kind) {
+            const pm = { config: 'config', tree: 'tree_', summaries: 'sum_', sandbox: 'sandbox_' };
+            const p = pm[kind] || '';
+            try { const keys = await storeListKeys(); return { backups: keys.filter(k => { const key = typeof k === 'object' ? k.key : k; return key && key.startsWith(p); }).map(k => ({ name: `${typeof k === 'object' ? k.key : k}.json`, location: 'store', mtime: Date.now(), size: 0 })) }; } catch (e) { return { backups: [] }; }
+        },
+        async readBackup(kind, name) { const key = name.replace(/\.json$/i, ''); try { const d = await storeRead(key); return { name, data: d }; } catch { return null; } },
+        async migrateKey(from, to) {
+            const pfx = ['tree_', 'sum_', 'sandbox_']; let n = 0;
+            for (const pf of pfx) {
+                try { const d = await storeRead(`${pf}${safeKey(from)}`); if (d != null) { const ex = await storeRead(`${pf}${safeKey(to)}`); if (ex == null || (Array.isArray(ex) && ex.length === 0) || (typeof ex === 'object' && !Array.isArray(ex) && Object.keys(ex).length === 0)) { await storeWrite(`${pf}${safeKey(to)}`, d); n++; } } } catch {}
+            }
+            return { success: true, migrated: n };
+        },
+        async backfillRealtime({ summaries, sandboxName }) {
+            const bk = await this.readBackup('sandbox', sandboxName);
+            const sc = Array.isArray(bk?.data) ? bk.data : [];
+            const patched = JSON.parse(JSON.stringify(summaries || {}));
+            const secs = ['recaps', 'weeklySummaries', 'historicalSummaries'];
+            let filled = 0, snf = 0, snt = 0;
+            const st = m => m?.send_date || m?.timestamp || m?.date || null;
+            const fmt = v => { const d = new Date(v); if (Number.isNaN(d.getTime())) return null; const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+            const gr = item => { const f = item?.coveredFloors; if (f && Number.isFinite(f.lo)) return f; const m = String(item?.source || item?.timespan || '').match(/(\d+)\s*[-~到]\s*(\d+)/); return m ? { lo: Number(m[1]), hi: Number(m[2]) } : null; };
+            for (const sec of secs) { for (const item of (Array.isArray(patched[sec]) ? patched[sec] : [])) { const r = gr(item); if (!r) { snf++; continue; } const s = sc[r.lo-1], e = sc[r.hi-1] || s, ts = st(s), te = st(e); if (!ts || !te) { snt++; continue; } const span = ts === te ? fmt(ts) : `${fmt(ts)} ~ ${fmt(te)}`; if (span) { item.realTimespan = span; if (!item.coveredFloors) item.coveredFloors = { lo: r.lo, hi: r.hi }; filled++; } } }
+            return { summaries: patched, filled, sandboxLen: sc.length, skippedNoFloors: snf, skippedNoTs: snt };
+        },
+        async writeLog(message, level) { console.log(`[Memory Wizard] [${level || 'INFO'}] ${message}`); try { const d = await storeRead('logs'); const logs = Array.isArray(d) ? d.slice(-199) : []; logs.push({ time: new Date().toISOString(), level: level || 'INFO', message }); await storeWrite('logs', logs); } catch {} },
+        async getLogs(limit) { try { const d = await storeRead('logs'); const logs = Array.isArray(d) ? d : []; return logs.slice(Math.max(0, logs.length - Math.max(1, limit || 50))); } catch { return []; } },
+        async ping() { try { await storeRead('config'); return true; } catch { return false; } },
+    };
+    console.log(`${LP} STORE API 初始化完成 (extension.store)。`);
+})();
+// ══════════════════════════════════════════════════════════════════════
+
 // frontend/index.js for Memory Wizard (st-memory-wizzard)
 //
 // ══════════════════════════════════════════════════════════════════════

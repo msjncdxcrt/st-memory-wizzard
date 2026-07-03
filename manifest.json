@@ -3,7 +3,7 @@
   "loading_order": 100,
   "requires": [],
   "optional": [],
-  "js": ["tauritavern-backend-shim.js", "index.js"],
+  "js": "index.js",
   "css": "index.css",
   "author": "Shawn (ported to TauriTavern by gu)",
   "version": "1.0.1-tt",
