@@ -13,7 +13,13 @@
     const metadata = ttApi.api?.chat?.metadata;
     function safeKey(id) { return (id || '').replace(/[^a-zA-Z0-9_-]/g, '_'); }
     async function storeRead(key) {
-        try { return await store.getJson({ namespace: MODULE_ID, key }); } catch (e) {
+        // 优先使用 tryGetJson（key 不存在时不抛异常），回退 getJson + try/catch
+        const getter = store.tryGetJson || store.getJson;
+        try {
+            const result = await getter.call(store, { namespace: MODULE_ID, key });
+            if (result && typeof result === 'object' && 'found' in result) return result.found ? result.value : null;
+            return result;
+        } catch (e) {
             if (metadata) { try { const d = await metadata.get(); if (d?.[MODULE_ID]?.[key] !== undefined) return d[MODULE_ID][key]; } catch {} }
             return null;
         }
