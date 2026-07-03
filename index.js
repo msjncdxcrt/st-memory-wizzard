@@ -17,27 +17,50 @@
         const getter = store.tryGetJson || store.getJson;
         try {
             const result = await getter.call(store, { namespace: MODULE_ID, key });
-            if (result && typeof result === 'object' && 'found' in result) return result.found ? result.value : null;
+            if (result && typeof result === 'object' && 'found' in result) {
+                if (result.found) { console.log(`${LP} storeRead 命中: ${key}`); return result.value; }
+                console.log(`${LP} storeRead 未命中: ${key}`);
+                return null;
+            }
+            console.log(`${LP} storeRead 直返: ${key}`, typeof result);
             return result;
         } catch (e) {
+            console.warn(`${LP} storeRead 异常: ${key}`, e.message || e);
             if (metadata) { try { const d = await metadata.get(); if (d?.[MODULE_ID]?.[key] !== undefined) return d[MODULE_ID][key]; } catch {} }
             return null;
         }
     }
     async function storeWrite(key, value) {
-        try { await store.setJson({ namespace: MODULE_ID, key, value }); } catch (e) {
+        try { await store.setJson({ namespace: MODULE_ID, key, value }); console.log(`${LP} storeWrite 完成: ${key}`); } catch (e) {
+            console.error(`${LP} storeWrite 失败: ${key}`, e.message || e);
             if (metadata) { try { const d = (await metadata.get()) || {}; if (!d[MODULE_ID]) d[MODULE_ID] = {}; d[MODULE_ID][key] = value; await metadata.setExtension({ namespace: MODULE_ID, value: d[MODULE_ID] }); } catch {} }
         }
     }
     async function storeListKeys() {
         try { const r = await store.listKeys({ namespace: MODULE_ID }); return Array.isArray(r) ? r.map(k => typeof k === 'string' ? { namespace: MODULE_ID, key: k } : k) : []; } catch { return []; }
     }
+    // ── 默认初始树结构（原 ST 后端在树文件不存在时返回此值）────────
+    const NOW = new Date().toISOString().slice(0, 10);
+    const INITIAL_CATEGORIES = [
+        { path: "身份核", title: "身份核", hint: "聊关于我的设定/身份时读我", pinned: true, content: "身份核心设定。", updated: NOW, children: [
+            { path: "身份核/当前进行中事项", title: "当前进行中事项", hint: "聊目前有什么任务/在做什么时读我", pinned: true, content: "当前进行中事项。", updated: NOW, children: [] },
+            { path: "身份核/豁免三条", title: "豁免三条", hint: "我的行为规范/豁免条款", pinned: true, content: "豁免三条：不违反规则，保护设定，不背叛信赖。", updated: NOW, children: [] }
+        ]},
+        { path: "知识", title: "知识", hint: "聊具体概念/理论/事实时读我", pinned: false, content: "", updated: NOW, children: [] },
+        { path: "关系与情感", title: "关系与情感", hint: "聊与你的经历/情感/好恶时读我", pinned: false, content: "", updated: NOW, children: [] },
+        { path: "现实事件", title: "现实事件", hint: "聊现实新闻/天气/发生的具体事件时读我", pinned: false, content: "", updated: NOW, children: [] },
+        { path: "项目", title: "项目", hint: "聊我们在协作的计划/写代码/做视频时读我", pinned: false, content: "", updated: NOW, children: [] },
+        { path: "挂账", title: "挂账", hint: "聊还未完成的讨论/遗留账目/待办时读我", pinned: false, content: "", updated: NOW, children: [] }
+    ];
+    const INITIAL_SHARED_TREE = [
+        { path: "共有记忆", title: "共有记忆", hint: "所有角色共享的记忆，聊到跨角色通用的设定/事实时读我", pinned: true, shared: true, content: "", updated: NOW, children: [] }
+    ];
     window.STORE = {
         async getConfig() { const d = await storeRead('config'); return d || {}; },
         async saveConfig(c) { await storeWrite('config', c); return { success: true }; },
-        async getTree(chatId) { const d = await storeRead(`tree_${safeKey(chatId)}`); return Array.isArray(d) ? d : []; },
+        async getTree(chatId) { const key = `tree_${safeKey(chatId)}`; const d = await storeRead(key); if (Array.isArray(d) && d.length > 0) { console.log(`${LP} getTree: 返回已有树, ${d.length} 根节点`); return d; } console.log(`${LP} getTree: 首次加载, 写入默认初始分类`); await storeWrite(key, INITIAL_CATEGORIES); return INITIAL_CATEGORIES; },
         async saveTree(chatId, t) { await storeWrite(`tree_${safeKey(chatId)}`, t); return { success: true }; },
-        async getSharedTree() { const d = await storeRead('shared_tree'); return Array.isArray(d) ? d : []; },
+        async getSharedTree() { const d = await storeRead('shared_tree'); if (Array.isArray(d) && d.length > 0) { console.log(`${LP} getSharedTree: 返回已有树`); return d; } console.log(`${LP} getSharedTree: 首次加载, 写入默认共有记忆`); await storeWrite('shared_tree', INITIAL_SHARED_TREE); return INITIAL_SHARED_TREE; },
         async saveSharedTree(t) { await storeWrite('shared_tree', t); return { success: true }; },
         async getSummaries(chatId) { const d = await storeRead(`sum_${safeKey(chatId)}`); return d || { recaps: [], weeklySummaries: [], historicalSummaries: [], lastArchivedIndex: 0 }; },
         async saveSummaries(chatId, s) { await storeWrite(`sum_${safeKey(chatId)}`, s); return { success: true }; },
@@ -3163,17 +3186,14 @@ async function fetchAndMergeSharedTree() {
 // REGION: 记忆树 — 持久化 / 分支共享存储（saveTreeToServer / 共有记忆合并）
 // ══════════════════════════════════════════════════════════════════════
 async function saveTreeToServer(skipNormalize = false) {
-    if (!activeChatId) return;
+    if (!activeChatId) { console.warn('[MW Diag] saveTreeToServer 跳过: activeChatId 为空'); return; }
     if (!skipNormalize) normalizeTreeHierarchyByPath();
-    // Split the shared branch out: it is persisted to its own global document and must
-    // NOT be written into the per-character file (which would duplicate it and break
-    // cross-character sharing). Only save the shared document once it has been loaded
-    // this session, so a failed/absent load never overwrites it with an empty branch.
     const { personal, shared } = splitSharedFromTree(memoryTree);
     if (!window.STORE) {
         console.error(`${LOG_PREFIX} STORE 不可用，无法保存记忆树。`);
         return;
     }
+    console.log('[MW Diag] saveTreeToServer: personal=', personal.length, '节点, shared=', shared.length, '节点, activeChatId=', activeChatId);
     if (sharedTreeLoaded && !treeLoadInProgress) {
         try {
             await window.STORE.saveSharedTree(shared);
@@ -13900,20 +13920,22 @@ function migrateTreeStructure(tree) {
 // Falls back to the raw chatId only when no character/group context exists.
 function resolveStorageKey() {
     const context = window.SillyTavern?.getContext();
-    if (!context) return "";
+    if (!context) { console.warn('[MW Diag] resolveStorageKey: getContext() 返回空'); return ""; }
     // Group chat: the group id is stable across all of the group's branches.
     if (context.groupId) {
+        console.log('[MW Diag] resolveStorageKey: 群聊模式 →', `group_${context.groupId}`);
         return `group_${context.groupId}`;
     }
     // Solo chat: the avatar filename is the canonical stable id for a character
-    // (characterId is just an array index and shifts as characters are added /
-    // removed). characters[characterId].avatar is unique and persistent.
     const chars = context.characters;
     const chid = context.characterId;
+    console.log('[MW Diag] resolveStorageKey: characters 数量=', chars?.length, ' characterId=', chid);
     if (Array.isArray(chars) && chid !== undefined && chid_valid(chid, chars) && chars[chid]?.avatar) {
+        console.log('[MW Diag] resolveStorageKey: 角色模式 →', `char_${chars[chid].avatar}`);
         return `char_${chars[chid].avatar}`;
     }
     // No resolvable character — fall back to the raw chat id.
+    console.log('[MW Diag] resolveStorageKey: 回退 chatId →', context.chatId || '(空)');
     return context.chatId || "";
 }
 function chid_valid(chid, chars) {
@@ -13975,14 +13997,16 @@ async function onChatChanged() {
         loadAiShrinkPending();
 
         // Fetch tree from server
-        treeLoadInProgress = true; // any saveTreeToServer() below must not touch the shared doc yet
+        treeLoadInProgress = true;
         try {
             if (!window.STORE) {
                 writeLog('STORE 不可用，跳过记忆树加载。', 'WARNING');
                 treeLoadInProgress = false;
                 return;
             }
+            console.log('[MW Diag] 开始加载记忆树, activeChatId=', activeChatId);
             const data = await window.STORE.getTree(activeChatId);
+            console.log('[MW Diag] getTree 返回:', Array.isArray(data) ? `数组, 长度=${data.length}` : typeof data);
             if (Array.isArray(data)) {
                 memoryTree = data;
                 writeLog(`Tree loaded: ${memoryTree.length} root nodes.`);
