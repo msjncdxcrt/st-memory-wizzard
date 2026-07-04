@@ -13912,35 +13912,15 @@ function migrateTreeStructure(tree) {
     return { migrated, tree: newTree };
 }
 
-// Resolve a STABLE storage key for the current character/group that does NOT
-// change across chat branches. SillyTavern's chatId is the per-branch chat
-// filename, so it differs for every fork/branch — keying plugin data by it makes
-// memory "vanish" when you switch branches. Instead we key by the character's
-// avatar filename (unique & stable) for solo chats, or the group id for groups.
-// Falls back to the raw chatId only when no character/group context exists.
+// 存储 key 解析：使用 chatId 作为存储 key，每个会话独立记忆。
+// 注意：原版使用角色头像名做稳定 key 来跨分支共享，但会导致同一角色开新会话时
+// 旧数据（树、史记等）残留。改为 chatId 后每个会话记忆独立。
 function resolveStorageKey() {
     const context = window.SillyTavern?.getContext();
     if (!context) { console.warn('[MW Diag] resolveStorageKey: getContext() 返回空'); return ""; }
-    // Group chat: the group id is stable across all of the group's branches.
-    if (context.groupId) {
-        console.log('[MW Diag] resolveStorageKey: 群聊模式 →', `group_${context.groupId}`);
-        return `group_${context.groupId}`;
-    }
-    // Solo chat: the avatar filename is the canonical stable id for a character
-    const chars = context.characters;
-    const chid = context.characterId;
-    console.log('[MW Diag] resolveStorageKey: characters 数量=', chars?.length, ' characterId=', chid);
-    if (Array.isArray(chars) && chid !== undefined && chid_valid(chid, chars) && chars[chid]?.avatar) {
-        console.log('[MW Diag] resolveStorageKey: 角色模式 →', `char_${chars[chid].avatar}`);
-        return `char_${chars[chid].avatar}`;
-    }
-    // No resolvable character — fall back to the raw chat id.
-    console.log('[MW Diag] resolveStorageKey: 回退 chatId →', context.chatId || '(空)');
-    return context.chatId || "";
-}
-function chid_valid(chid, chars) {
-    const n = parseInt(chid);
-    return !isNaN(n) && n >= 0 && n < chars.length;
+    const key = context.chatId || "";
+    console.log('[MW Diag] resolveStorageKey →', key || '(空)');
+    return key;
 }
 
 // ══════════════════════════════════════════════════════════════════════
