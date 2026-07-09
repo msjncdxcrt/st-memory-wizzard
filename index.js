@@ -402,6 +402,71 @@ Instructions:
 6. Output only JSON, do not include codeblock markers.`;
 }
 
+/**
+ * 安全解析树操作 JSON。AI 返回的 JSON 常见错误：
+ * - 尾随逗号（{a:1,} → {a:1}）
+ * - 被 markdown 代码块包裹
+ * - 文本前后有多余内容
+ * - 双花括号转义残留
+ * 尝试逐级修复，最后才抛出异常。
+ */
+function safeParseTreeOpsJson(raw) {
+    if (!raw || typeof raw !== 'string') {
+        throw new Error('Empty or non-string response from tree-fill model.');
+    }
+    let text = raw.trim();
+
+    // 0. 提取第一个完整 JSON 对象（处理 AI 在 JSON 前后附加解释文字的情况）
+    const firstBrace = text.indexOf('{');
+    const lastBrace = text.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+        text = text.slice(firstBrace, lastBrace + 1);
+    }
+
+    // 1. 移除 markdown 代码块标记
+    text = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+    // 2. 修复 AI 常见的双花括号转义残留（如 "{{"key":...}}"）
+    text = text.replace(/^\{\{/, '{').replace(/\}\}$/, '}');
+
+    // 3. 移除尾随逗号（在 } 或 ] 之前）
+    text = text.replace(/,(\s*[}\]])/g, '$1');
+
+    // 4. 尝试解析
+    let lastError = null;
+    const attempts = [text];
+
+    // 备选：逐行修复常见问题
+    // 4a. 移除 // 或 # 风格的行注释
+    const noLineComments = text.replace(/^\s*(\/\/|#).*$/gm, '');
+    if (noLineComments !== text) attempts.push(noLineComments);
+
+    for (const attempt of attempts) {
+        try {
+            return JSON.parse(attempt);
+        } catch (e) {
+            lastError = e;
+            // 尝试定位具体错误位置并修复
+            const posMatch = e.message.match(/position\s+(\d+)/i);
+            if (posMatch) {
+                const errPos = parseInt(posMatch[1], 10);
+                // 尝试在错误位置附近移除问题字符
+                const before = attempt.slice(Math.max(0, errPos - 20), errPos + 20);
+                // 常见模式：字符串中的未转义换行符
+                const fixed = attempt.slice(0, errPos) + attempt.slice(errPos + 1);
+                try {
+                    return JSON.parse(fixed);
+                } catch (e2) {
+                    // 继续尝试下一个备选
+                }
+            }
+        }
+    }
+
+    // 最终回退：尝试用 eval 提取（仅限可信的内部调用）
+    throw lastError || new Error('Failed to parse tree ops JSON after all repair attempts.');
+}
+
 // Manual-fusion tree-fill instruction block (the <treeops> task appended after the
 // fusion system prompt when config.manualFusionTreeOps is on). Defined as a shared
 // helper so BOTH the real send (buildFusionInvocation) and the token-count preview
@@ -5823,8 +5888,12 @@ async function runProfileLlmCall(profileName, messages, systemPrompt = "", tempe
     }
 
     try {
-        const config = await getProfileConfig(profileName);
-        return await callLlmDirect(config, messages, systemPrompt, temperature, timeoutMs, abortSignal);
+        const profileCfg = await getProfileConfig(profileName);
+        // 检测空 API URL：跳过肯定会失败的直连调用，直接回退到 ST 主 API
+        if (!profileCfg.apiUrl || (typeof profileCfg.apiUrl === 'string' && !profileCfg.apiUrl.trim())) {
+            throw new Error(`Profile "${profileName}" has no API URL configured — skipping direct fetch, falling back to main API.`);
+        }
+        return await callLlmDirect(profileCfg, messages, systemPrompt, temperature, timeoutMs, abortSignal);
     } catch (e) {
         if (e.name === 'AbortError' || (abortSignal && abortSignal.aborted)) {
             throw e; // Propagate abort directly without falling back
@@ -6664,7 +6733,23 @@ Return "知识/德国观念论/康德".
         });
 
         if (!placeholderSubstituted) {
-            writeLog(`Memory placeholders ${JSON.stringify(placeholders)} not found in preset/cards; nothing injected this turn.`);
+            writeLog(`Memory placeholders ${JSON.stringify(placeholders)} not found in preset/cards; injecting via extension prompt fallback.`);
+            // 回退方案：通过 setExtensionPrompt 将记忆树内容注入到对话中（位置=in_chat, depth=0）
+            // 这样即使用户忘记在系统提示词中添加 {{memory}} 或 {{memory_tree}}，记忆树仍然有效。
+            try {
+                const fallbackMemory = compileMemoryTreeMacroValue();
+                if (fallbackMemory && fallbackMemory.trim()) {
+                    const ctx = window.SillyTavern?.getContext();
+                    const setEP = ctx?.setExtensionPrompt;
+                    if (typeof setEP === 'function') {
+                        setEP('st-memory-wizzard-fallback', fallbackMemory, EP_TYPE_IN_CHAT, 0);
+                        registeredInjectKeys.add('st-memory-wizzard-fallback');
+                        writeLog(`Injected memory tree via extension prompt fallback (${estimateTokens(fallbackMemory)} est. tokens).`);
+                    }
+                }
+            } catch (fallbackErr) {
+                writeLog(`Fallback injection failed: ${fallbackErr.message}`, 'WARNING');
+            }
         }
 
         // 注：fakeChatHistory 下原生楼层的屏蔽已交给 ST 全局 regex（syncFakeChatRegex 注入的
@@ -6939,8 +7024,7 @@ async function fillTreeFromRecord(instruction, sourceText, sourceFloor = null) {
 
     const userContent = `<record 指令>\n${instruction}\n</record 指令>\n\n来源正文（AI 本条回复）:\n${sourceText || '(空)'}`;
     const resp = await runProfileLlmCall(treeFillProfile, [{ role: 'user', content: userContent }], systemPrompt, 0.1);
-    const cleanJson = (resp || '').replace(/```json/gi, '').replace(/```/g, '').trim();
-    const opsResult = JSON.parse(cleanJson);
+    const opsResult = safeParseTreeOpsJson(resp);
     if (opsResult && Array.isArray(opsResult.ops) && opsResult.ops.length) {
         applyTreeOperations(opsResult.ops, treeSourceMetaForFloor(sourceFloor));
         await saveTreeToServer();
@@ -6979,8 +7063,7 @@ async function runTreeFillPipeline() {
 
     try {
         const treeOpsResponse = await runProfileLlmCall(getProfileFor('treeFill'), [{ role: 'user', content: textContext }], treePrompt, 0.1);
-        const cleanJson = treeOpsResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
-        const opsResult = JSON.parse(cleanJson);
+        const opsResult = safeParseTreeOpsJson(treeOpsResponse);
         if (opsResult && Array.isArray(opsResult.ops)) {
             applyTreeOperations(opsResult.ops);
             await saveTreeToServer();
