@@ -7061,20 +7061,29 @@ async function runTreeFillPipeline() {
     const treeHeader = (config.promptTreeFill || '').trim() || DEFAULT_TREEFILL_PROMPT;
     const treePrompt = `${treeHeader}${buildTreeFillTail()}`;
 
+    let treeFillSucceeded = false;
     try {
         const treeOpsResponse = await runProfileLlmCall(getProfileFor('treeFill'), [{ role: 'user', content: textContext }], treePrompt, 0.1);
         const opsResult = safeParseTreeOpsJson(treeOpsResponse);
         if (opsResult && Array.isArray(opsResult.ops)) {
             applyTreeOperations(opsResult.ops);
             await saveTreeToServer();
+            treeFillSucceeded = true;
+        } else {
+            writeLog(`Tree-fill: model returned no ops or invalid structure.`, 'WARNING');
         }
     } catch (e) {
         writeLog(`Tree-fill failed: ${e.message}`, 'WARNING');
     }
 
-    // Advance the tree-fill cursor to the end of what we just processed.
-    summaries.lastTreeFillIndex = endIndex + 1;
-    await saveSummariesToServer();
+    // 只有成功后光标才前进，失败时保留原位置等待下次重试
+    if (treeFillSucceeded) {
+        summaries.lastTreeFillIndex = endIndex + 1;
+        await saveSummariesToServer();
+        writeLog(`Tree-fill cursor advanced to ${summaries.lastTreeFillIndex}.`);
+    } else {
+        writeLog(`Tree-fill did not succeed; cursor stays at ${summaries.lastTreeFillIndex} for retry next turn.`);
+    }
 }
 
 // 队尾日记融合：把「队尾连续未覆盖段」(tailUncoveredRun) 融成一条日记。这是与 post-flash
